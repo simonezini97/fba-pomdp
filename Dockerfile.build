@@ -1,0 +1,20 @@
+FROM ubuntu:latest
+
+USER root
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Preparing developement libraries with apt
+RUN apt update \
+	&& apt install -y build-essential libboost-all-dev git gcc g++ cmake wget
+
+# Install other libraries and applications
+RUN CXX=/usr/bin/gcc-9 && export CXX && \
+	wget https://sourceforge.net/projects/boost/files/boost/1.61.0/boost_1_61_0.tar.bz2 && \
+	tar --bzip2 -xf ./boost_1_61_0.tar.bz2 && rm boost_1_61_0.tar.bz2 && mv ./boost_1_61_0 /usr/local/ && \
+	BOOST_ROOT=/usr/local/boost_1_61_0 && export BOOST_ROOT && cd /
+
+RUN	git clone https://github.com/samkatt/fba-pomdp.git && cd ./fba-pomdp/ && \
+	cmake -DCMAKE_BUILD_TYPE=Release
+RUN cd /fba-pomdp/ && make -f /fba-pomdp/Makefile 
+WORKDIR /fba-pomdp/
