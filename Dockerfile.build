@@ -1,20 +1,40 @@
-FROM ubuntu:latest
-
-USER root
+FROM ubuntu:20.04 AS development
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Preparing developement libraries with apt
-RUN apt update \
-	&& apt install -y build-essential libboost-all-dev git gcc g++ cmake wget
+RUN apt update && apt install -y \
+    build-essential git wget cmake \
+    gcc-9 g++-9
 
-# Install other libraries and applications
-RUN CXX=/usr/bin/gcc-9 && export CXX && \
-	wget https://sourceforge.net/projects/boost/files/boost/1.61.0/boost_1_61_0.tar.bz2 && \
-	tar --bzip2 -xf ./boost_1_61_0.tar.bz2 && rm boost_1_61_0.tar.bz2 && mv ./boost_1_61_0 /usr/local/ && \
-	BOOST_ROOT=/usr/local/boost_1_61_0 && export BOOST_ROOT && cd /
+ENV CC=/usr/bin/gcc-9
+ENV CXX=/usr/bin/g++-9
 
-RUN	git clone https://github.com/samkatt/fba-pomdp.git && cd ./fba-pomdp/ && \
-	cmake -DCMAKE_BUILD_TYPE=Release
-RUN cd /fba-pomdp/ && make -f /fba-pomdp/Makefile 
-WORKDIR /fba-pomdp/
+# Install Boost 1.61 (headers + compiled libs)
+RUN wget https://sourceforge.net/projects/boost/files/boost/1.61.0/boost_1_61_0.tar.bz2 && \
+    tar --bzip2 -xf boost_1_61_0.tar.bz2 && \
+    rm boost_1_61_0.tar.bz2 && \
+    mv boost_1_61_0 /usr/local/boost_1_61_0 && \
+    cd /usr/local/boost_1_61_0 && \
+    ./bootstrap.sh --with-libraries=program_options,filesystem,system,chrono,timer && \
+    ./b2 install
+
+# Clone and build fba-pomdp
+RUN git clone https://github.com/samkatt/fba-pomdp.git /fba-pomdp
+
+WORKDIR /fba-pomdp
+
+RUN mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DBOOST_ROOT=/usr/local/boost_1_61_0 \
+          -DBoost_NO_SYSTEM_PATHS=ON \
+          .. && \
+    make -j4
+
+FROM ubuntu:20.04
+
+COPY --from=development /fba-pomdp/build/planning .
+COPY --from=development /fba-pomdp/build/bapomdp .
+COPY --from=development /fba-pomdp/build/fbapomdp .
+
+RUN chmod +x planning bapomdp fbapomdp
+CMD ["bash"]
